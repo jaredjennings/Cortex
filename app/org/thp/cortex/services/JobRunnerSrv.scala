@@ -30,6 +30,7 @@ class JobRunnerSrv @Inject() (
     artifactModel: ArtifactModel,
     processJobRunnerSrv: ProcessJobRunnerSrv,
     dockerJobRunnerSrv: DockerJobRunnerSrv,
+    k8sJobRunnerSrv: K8sJobRunnerSrv,
     workerSrv: WorkerSrv,
     createSrv: CreateSrv,
     updateSrv: UpdateSrv,
@@ -49,6 +50,7 @@ class JobRunnerSrv @Inject() (
     .getOrElse(Seq("docker", "process"))
     .map(_.toLowerCase)
     .collect {
+      case "kubernetes" if k8sJobRunnerSrv.isAvailable => "kubernetes"
       case "docker" if dockerJobRunnerSrv.isAvailable => "docker"
       case "process" =>
         Seq("", "2", "3").foreach { pythonVersion =>
@@ -67,6 +69,7 @@ class JobRunnerSrv @Inject() (
 
   lazy val processRunnerIsEnable: Boolean = runners.contains("process")
   lazy val dockerRunnerIsEnable: Boolean  = runners.contains("docker")
+  lazy val k8sRunnerIsEnable: Boolean  = runners.contains("kubernetes")
 
   private object deleteVisitor extends SimpleFileVisitor[Path] {
     override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
@@ -209,6 +212,14 @@ class JobRunnerSrv @Inject() (
         _ <- startJob(job)
         j <- runners
           .foldLeft[Option[Future[Unit]]](None) {
+            case (None, "kubernetes") =>
+              worker
+                .dockerImage()
+                .map(dockerImage => k8sJobRunnerSrv.run(jobFolder, dockerImage, job, worker.jobTimeout().map(_.minutes))(executionContext))
+                .orElse {
+                  logger.warn(s"worker ${worker.id} can't be run with docker (doesn't have image)")
+                  None
+                }
             case (None, "docker") =>
               worker
                 .dockerImage()

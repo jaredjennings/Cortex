@@ -15,6 +15,7 @@ libraryDependencies ++= Seq(
   Dependencies.reflections,
   Dependencies.zip4j,
   Dependencies.dockerClient,
+  Dependencies.k8sClient,
   Dependencies.akkaCluster,
   Dependencies.akkaClusterTyped
 )
